@@ -3,6 +3,7 @@ from constants import (TILE_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_MAX_WEIGHT)
 import sdl2
 import sdl2.ext
 import random
+from sprite_container import SpriteContainer
 random.seed()
 
 def find_element(L, func):
@@ -10,40 +11,35 @@ def find_element(L, func):
 		if func(element):
 			return element
 	return None
-class Tile:
-	def __init__(self, position, sprites, weight):
-		self.position = position
-		self.sprites = sprites
-		self.weight = weight
-	def get_sprites(self):
-		for sprite in self.sprites:
-			yield sprite
-
-def tile_factory(scene, tile_position):
-	tile_weight = random.randrange(0, TILE_MAX_WEIGHT)
-
+def weight_to_color(weight):
 	sprite_size = (TILE_SIZE,TILE_SIZE)
-	color = int(255 * tile_weight / (TILE_MAX_WEIGHT-1))
+	color = int(255 * weight / (TILE_MAX_WEIGHT-1))
 	if color > 255: color = 255
-	sprite_color = sdl2.ext.Color(color, color, color)
-	tile_sprite = scene.factory.from_color(sprite_color, sprite_size)
-	tile_sprite.position = (tile_position[0] * TILE_SIZE, tile_position[1] * TILE_SIZE)
-	
-	scene.sprites.append((tile_sprite,0))
-	
-	return Tile(tile_position, [tile_sprite], tile_weight)
-		
-class TileMap:
+	return sdl2.ext.Color(color, color, color)
+def map2screen(map_position):
+	return (map_position[0] * TILE_SIZE, map_position[1] * TILE_SIZE)
+def screen2map(screen_position):
+	return (screen_position[0] // TILE_SIZE, screen_position[1] // TILE_SIZE)
+
+class Tile:
+	def __init__(self, weight):
+		self.weight = weight
+
+class TileMap(SpriteContainer):
 	def __init__(self, scene, max_position):
 		self.tiles = {}
+		sprites = []
 		for x in range(max_position[0]):
 			for y in range(max_position[1]):
-				self.tiles[(x,y)] = tile_factory(scene, (x, y))
-	def get_sprites(self):
-		for key in self.tiles:
-			self.tiles[key].get_sprites()
-			#for sprite in self.tiles[key].sprites
-			#	yield sprite
+				map_position = (x,y)
+				weight=random.randrange(0, TILE_MAX_WEIGHT)
+				self.tiles[map_position] = Tile(weight)
+				sprite = scene.factory.from_color(weight_to_color(weight), (TILE_SIZE,TILE_SIZE))
+				sprite.position = map2screen(map_position)
+				sprites.append(sprite)
+				# TODO: find way to automatically update sprite color when tile weight is changed
+		super().__init__(layer=0, sprites=sprites)
+		self.register(scene)
 	
 def get_range(scene, unit):
 	DELTAS = [(-1,0),(1,0),(0,-1),(0,1)]
@@ -78,100 +74,103 @@ def get_range(scene, unit):
 		EDGE.sort(key=lambda element: element[1])
 	return RANGE
 
-class Unit:
-	def __init__(self, position, sprite, move_range):
+class RangeIndicator(SpriteContainer):
+	def __init__(self, scene, unit):
+		self.map_positions = get_range(scene, unit)
+		sprites = []
+		for map_position in self.map_positions:
+			sprite = scene.factory.from_image(Resources.get('in-range.png'))
+			sprite.position = map2screen(map_position)
+			sprites.append(sprite)
+		super().__init__(layer=2, sprites=sprites)
+		self.register(scene)
+
+class SelectionIndicator(SpriteContainer):
+	def __init__(self, scene, unit):
+		sprite = scene.factory.from_image(Resources.get('unit-selected.png'))
+		sprite.position = map2screen(unit.position)
+		super().__init__(layer=2, sprites=[sprite])
+		self.register(scene)
+class Unit(SpriteContainer):
+	def __init__(self, scene, position, move_range):
 		self.position = position
 		self.move_range = move_range
-		self.sprite = sprite
-
-	
-def unit_factory(scene, unit_position, unit_move_range):
-	sprite_size = (TILE_SIZE, TILE_SIZE)
-	unit_sprite = scene.factory.from_image(Resources.get("unit.png"))
-	unit_sprite.position = (unit_position[0] * TILE_SIZE, unit_position[1] * TILE_SIZE)
-	scene.sprites.append((unit_sprite, 1))
-	return Unit(unit_position, unit_sprite, unit_move_range)
-	
-class Range:
-	def __init__(self):
-		self.map_positions = []
-		self.sprites = []
-	def get_sprites(self):
-		for sprite in self.sprites:
-			yield sprite
-	def clear(self, scene):
-		self.map_positions.clear()
-		for sprite in self.sprites:
-			scene.sprites.remove(find_element(scene.sprites, lambda element: element[0] == sprite))
-		self.sprites.clear()
-def range_factory(scene, unit):
-	range = Range()
-	for map_position in get_range(scene, unit):
-		sprite = scene.factory.from_image(Resources.get('in-range.png'))
-		sprite.position = (map_position[0] * TILE_SIZE, map_position[1] * TILE_SIZE)
-		scene.sprites.append((sprite, 3))
 		
-		range.map_positions.append(map_position)
-		range.sprites.append(sprite)
-	return range
-	
+		sprite = scene.factory.from_image(Resources.get("unit.png"))
+		sprite.position = map2screen(position)
+		super().__init__(layer=1, sprites=[sprite])
+		self.register(scene)
+		self.range_indicator = None
+		self.selected = False
+	def move_unit(self, scene, position):
+		self.position = position
+		self.sprite.position = map2screen(position)
+	@property
+	def sprite(self):
+		return self.sprites[0][0]
+	def select(self, scene):
+		if not self.selected:
+			self.selected = True
+			self.selection_indicator = SelectionIndicator(scene, self)
+			self.selection_indicator.register(scene)
+			self.range_indicator = RangeIndicator(scene, self)
+			self.range_indicator.register(scene)
+	def deselect(self, scene):
+		if self.selected:
+			self.selected = False
+			self.selection_indicator.deregister(scene)
+			self.range_indicator.deregister(scene)
+	def in_range(self, position):
+		return position in self.range_indicator.map_positions
+		
+class HoverIndicator(SpriteContainer):
+	def __init__(self, scene):
+		sprite = scene.factory.from_image(Resources.get('tile-selection.png'))
+		super().__init__(layer=2, sprites=[sprite])
+	def set_position(self, scene, position):
+		self.sprites[0][0].position = map2screen(position)
+		self.register(scene)
+		
 class MyScene(SceneBase):
 	def __init__(self, **kwargs):
 		"""Initialization."""
 		# Nothing there for us but lets call super in case we implement
 		# something later on, ok?
 		super().__init__(**kwargs)
-		
-		# TODO: add sortable layers to sprites list entries
-		
 		self.sprites = []
-		
-		tile_max_position = (SCREEN_WIDTH // TILE_SIZE, SCREEN_HEIGHT // TILE_SIZE)
-		self.tilemap = TileMap(self, tile_max_position)
-		
+		self.tilemap = TileMap(self, screen2map((SCREEN_WIDTH, SCREEN_HEIGHT)))
 		self.hover_sprite = None
-		
-		self.units = []
-		self.units.append(unit_factory(self, (2,2), 4))
-		self.units.append(unit_factory(self, (2,1), 4))
-		
+		self.hover_indicator = HoverIndicator(self)
+		self.units = [
+			Unit(self, (2,2), 4),
+			Unit(self, (2,1), 4)
+		]
 		self.selected_unit = None
-		self.selection_sprite = self.factory.from_image(Resources.get('unit-selected.png'))
-		self.in_range = Range()
 	def on_update(self):
-		"""Graphical logic."""
-		# use the render method from manager's spriterenderer
 		self.manager.spriterenderer.render(sprites=[element[0] for element in self.sprites])
 	def on_mouse_motion(self, event, x, y, dx, dy):
-		if self.hover_sprite is None:
-			self.hover_sprite = self.factory.from_image(Resources.get('tile-selection.png'))
-			self.hover_sprite.position = ((x // TILE_SIZE) * TILE_SIZE, (y // TILE_SIZE) * TILE_SIZE)
-			self.sprites.append((self.hover_sprite, 2))
-		else:
-			self.hover_sprite.position = ((x // TILE_SIZE) * TILE_SIZE, (y // TILE_SIZE) * TILE_SIZE)
+		self.hover_indicator.set_position(self, screen2map((x,y)))
+	def get_unit_at_position(self, position):
+		return find_element(self.units, lambda element: element.position == position)
+	def select_unit(self, unit):
+		if not self.selected_unit is None:
+			self.selected_unit.deselect(self)
+		self.selected_unit = unit
+		if not self.selected_unit is None:
+			self.selected_unit.select(self)
 	def on_mouse_press(self, event, x, y, button, double):
+		position = screen2map((x,y))
 		if button == "LEFT":
-			sprite_position = (x // TILE_SIZE) * TILE_SIZE, (y // TILE_SIZE) * TILE_SIZE
-			map_position = (x // TILE_SIZE), (y // TILE_SIZE)
+			unit = self.get_unit_at_position(position)
 			if self.selected_unit is None:
-				self.selected_unit = find_element(self.units, lambda element: element.position == map_position)
-				if not self.selected_unit is None:
-					self.selection_sprite.position = self.selected_unit.sprite.position
-					self.sprites.append((self.selection_sprite, 4))
-					self.fill_range(self.selected_unit)
-			else:
-				if map_position in self.in_range.map_positions:
-					self.selected_unit.sprite.position = sprite_position
-					self.selected_unit.position = map_position
-					
-				# Find selection_sprite in sprites
-				self.sprites.remove(find_element(self.sprites, lambda element: element[0] == self.selection_sprite))
-				self.selected_unit = None
-				self.in_range.clear(self)
+				self.select_unit(unit)
+			elif not unit is None and not unit is self.selected_unit:
+				self.select_unit(unit)
+			elif self.selected_unit.in_range(position):
+				self.selected_unit.move_unit(self, position)
+				self.select_unit(None)
 				
-	def fill_range(self, unit):
-		self.in_range.clear(self)
-		self.in_range = range_factory(self, unit)
+				
 if __name__ == '__main__':
 	m = Manager(width=SCREEN_WIDTH, height=SCREEN_HEIGHT)
 	m.set_scene(scene=MyScene)
