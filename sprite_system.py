@@ -1,68 +1,83 @@
-#def _register(sprite_container, scene):
-#	if not sprite_container.registered:
-#		sprite_container.registered = True
-#		for element in sprite_container.get_data():
-#			scene.spritesystem.register(element)
-#def _deregister(sprite_container, scene):
-#	if sprite_container.registered:
-#		sprite_container.registered = False
-#		for data in sprite_container.get_data():
-#			scene.spritesystem.deregister(data)
+import sdl2
+import sdl2.ext
+from manager import Resources
 
-class Sprite:
-	def __init__(self, scene, **kwargs):
+class SpriteFactory:
+	def __init__(self, scene):
 		self.scene = scene
-		if "sprite" in kwargs and "layer" in kwargs:
-			self.data = (kwargs["sprite"], kwargs["layer"])
+		self.color_factory = scene.factory.from_color
+		self.image_factory = scene.factory.from_image
+	def from_color(self, color, size, **kwargs):
+		## kwargs = {positions OR position, depth}
+		if 'positions' in kwargs and 'position' in kwargs:
+			raise AttributeError('bad arguments passed to from_image')
+		elif 'positions' in kwargs:
+			sprites = []
+			for position in kwargs['positions']:
+				sprite = self.color_factory(color(position), size)
+				sprite.position = position
+				if 'depth' in kwargs:
+					sprite.depth = kwargs['depth']
+				sprites.append(sprite)
+			return SpriteGroup(self.scene, sprites)
 		else:
-			self.data = None
-		self.registered = False
-	
-	def register(self): self.scene.sprite_system.register(self)
-	def deregister(self): self.scene.sprite_system.deregister(self)
-	
-	@property
-	def sprite(self): return self.data[0]
-	@property
-	def layer(self): return self.data[1]
-		
-	def get_data(self):
-		yield self.data
+			sprite = self.color_factory(color, size)
+			if 'position' in kwargs and kwargs['position'] is not None:
+				sprite.position = kwargs['position']
+			if 'depth' in kwargs:
+				sprite.depth = kwargs['depth']
+			return SpriteHandler(self.scene, sprite)
+	def from_image(self, filename, **kwargs):
+		## kwargs = {positions OR position, depth}
+		if 'positions' in kwargs and 'position' in kwargs:
+			raise AttributeError('bad arguments passed to from_image')
+		elif 'positions' in kwargs:
+			sprites = []
+			for position in kwargs['positions']:
+				sprite = self.image_factory(Resources.get(filename))
+				sprite.position = position
+				if 'depth' in kwargs:
+					sprite.depth = kwargs['depth']
+				sprites.append(sprite)
+			return SpriteGroup(self.scene, sprites)
+		else:
+			sprite = self.image_factory(Resources.get(filename))
+			if 'position' in kwargs and kwargs['position'] is not None:
+				sprite.position = kwargs['position']
+			if 'depth' in kwargs:
+				sprite.depth = kwargs['depth']
+			return SpriteHandler(self.scene, sprite)
+
+class SpriteHandler:
+	def __init__(self, scene, sprite=None):
+		self.scene = scene
+		self.sprite = sprite
+	def register(self):
+		self.scene.sprite_system.register(self.sprite)
+	def deregister(self):
+		self.scene.sprite_system.deregister(self.sprite)
 
 class SpriteGroup:
 	""" class intended to make registration and deregistration of multiple sprites easier """
-	def __init__(self, scene, **kwargs):
+	def __init__(self, scene, sprites=[]):
 		self.scene = scene
-		if "layer" in kwargs and "sprites" in kwargs:
-			self.data = [(sprite, kwargs["layer"]) for sprite in kwargs["sprites"]]
-		else:
-			self.data = []
-		self.registered = False
-	def register(self): self.scene.sprite_system.register(self)
-	def deregister(self): self.scene.sprite_system.deregister(self)
-	def get_data(self):
-		for data in self.data:
-			yield data
+		self.sprites = [SpriteHandler(scene, sprite) for sprite in sprites]
+	def register(self):
+		for handler in self.sprites:
+			self.scene.sprite_system.register(handler.sprite)
+	def deregister(self):
+		for handler in self.sprites:
+			self.scene.sprite_system.deregister(handler.sprite)
 
 class SpriteSystem:
 	def __init__(self, scene, **kwargs):
 		self.scene = scene
-		self.data = []
-		if "layer" in kwargs and "sprites" in kwargs:
-			for sprite in kwargs["sprites"]:
-				self.data.append((sprite, kwargs["layer"]))
+		self.registered_sprites = []
 	def on_update(self):
-		self.scene.manager.spriterenderer.render(sprites=self.sprites)
-	@property
-	def sprites(self):
-		self.data.sort(key=lambda data: data[1]) # sort by layer
-		for sprite, layer in self.data:
-			yield sprite
-	def register(self, container):
-		for data in container.get_data():
-			if not data in self.data:
-				self.data.append(data)
-	def deregister(self, container):
-		for data in container.get_data():
-			if data in self.data:
-				self.data.remove(data)
+		self.scene.manager.spriterenderer.render(sprites=self.registered_sprites)
+	def register(self, sprite):
+		if not sprite in self.registered_sprites:
+			self.registered_sprites.append(sprite)
+	def deregister(self, sprite):
+		if sprite in self.registered_sprites:
+			self.registered_sprites.remove(sprite)
