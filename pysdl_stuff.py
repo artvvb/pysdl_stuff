@@ -3,7 +3,7 @@ from constants import (TILE_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_MAX_WEIGHT)
 import sdl2
 import sdl2.ext
 import random
-from sprite_container import Sprite, SpriteGroup, SpriteSystem
+from sprite_system import Sprite, SpriteGroup, SpriteSystem
 random.seed()
 
 LAYERS = {
@@ -12,7 +12,7 @@ LAYERS = {
 	"UnitGfx": 1,
 	"TileMap": 0
 }
-
+def get_layer(obj): return LAYERS[obj.__class__.__name__]
 
 def find_element(L, func):
 	for element in L:
@@ -35,8 +35,6 @@ class Tile:
 
 class TileMap(SpriteGroup):
 	def __init__(self, scene, max_position):
-		self.scene = scene
-	
 		self.tiles = {}
 		sprites = []
 		for x in range(max_position[0]):
@@ -44,12 +42,12 @@ class TileMap(SpriteGroup):
 				map_position = (x,y)
 				weight=random.randrange(0, TILE_MAX_WEIGHT)
 				self.tiles[map_position] = Tile(weight)
-				sprite = self.scene.factory.from_color(weight_to_color(weight), (TILE_SIZE,TILE_SIZE))
+				sprite = scene.factory.from_color(weight_to_color(weight), (TILE_SIZE,TILE_SIZE))
 				sprite.position = map2screen(map_position)
 				sprites.append(sprite)
 				# TODO: find way to automatically update sprite color when tile weight is changed
-		super().__init__(layer=LAYERS[self.__class__.__name__], sprites=sprites)
-		self.register(self.scene)
+		super().__init__(scene, layer=LAYERS[self.__class__.__name__], sprites=sprites)
+		self.register()
 	
 def get_range(scene, unit):
 	DELTAS = [(-1,0),(1,0),(0,-1),(0,1)]
@@ -85,12 +83,12 @@ def get_range(scene, unit):
 	return RANGE
 
 class RangeIndicatorFactory:
-	def from_position(self, scene, position):
-		sprite = scene.factory.from_image(Resources.get('in-range.png'))
+	def __init__(self, scene):
+		self.scene = scene
+	def from_position(self, position):
+		sprite = self.scene.factory.from_image(Resources.get('in-range.png'))
 		sprite.position = map2screen(position)
-		return (sprite, LAYERS[self.__class__.__name__])
-
-RANGE_INDICATOR_FACTORY = RangeIndicatorFactory()
+		return (sprite, get_layer(self))
 		
 class UnitGfx:
 	def __init__(self, scene, unit):
@@ -98,19 +96,19 @@ class UnitGfx:
 		self.unit = unit
 		self.scene = scene
 		
-		self.unit_indicator = Sprite(layer=LAYERS[self.__class__.__name__], sprite=self.scene.factory.from_image(Resources.get("unit.png")))
-		self.selected_indicator = Sprite(layer=LAYERS[self.__class__.__name__], sprite=self.scene.factory.from_image(Resources.get("unit-selected.png")))
-		self.moved_indicator = Sprite(layer=LAYERS[self.__class__.__name__], sprite=self.scene.factory.from_image(Resources.get("unit-moved.png")))
-		self.range_indicator_group = SpriteGroup()
-		self.range_indicator_factory = lambda position: RANGE_INDICATOR_FACTORY.from_position(self.scene, position)
+		self.unit_indicator = Sprite(self.scene, layer=get_layer(self), sprite=self.scene.factory.from_image(Resources.get("unit.png")))
+		self.selected_indicator = Sprite(self.scene, layer=get_layer(self), sprite=self.scene.factory.from_image(Resources.get("unit-selected.png")))
+		self.moved_indicator = Sprite(self.scene, layer=get_layer(self), sprite=self.scene.factory.from_image(Resources.get("unit-moved.png")))
+		self.range_indicator_group = SpriteGroup(self.scene)
+		self.range_indicator_factory = lambda position: self.scene.range_indicator_factory.from_position(position)
 	def update_range(self):
 		if self.unit.selected:
-			self.range_indicator_group.deregister(self.scene)
+			self.range_indicator_group.deregister()
 			self.range_indicator_group.data.clear()
 			self.range_indicator_group.data = [ self.range_indicator_factory(position) for position in self.unit.range]
-			self.range_indicator_group.register(self.scene)
+			self.range_indicator_group.register()
 		else:
-			self.range_indicator_group.deregister(self.scene)
+			self.range_indicator_group.deregister()
 	def update(self):
 		self.deregister()
 		self.unit_indicator.sprite.position = map2screen(self.unit.position)
@@ -123,18 +121,18 @@ class UnitGfx:
 		self.update_range()
 		
 		if self.unit.moved:
-			self.moved_indicator.register(self.scene)
+			self.moved_indicator.register()
 		else:
-			self.unit_indicator.register(self.scene)
+			self.unit_indicator.register()
 			
 		if self.unit.selected:
-			self.selected_indicator.register(self.scene)
+			self.selected_indicator.register()
 			
 	def deregister(self):
-		self.unit_indicator.deregister(self.scene)
-		self.selected_indicator.deregister(self.scene)
-		self.moved_indicator.deregister(self.scene)
-		self.range_indicator_group.deregister(self.scene)
+		self.unit_indicator.deregister()
+		self.selected_indicator.deregister()
+		self.moved_indicator.deregister()
+		self.range_indicator_group.deregister()
 		
 class Unit:
 	def __init__(self, scene, position, move_range):
@@ -171,21 +169,19 @@ class Unit:
 		
 class HoverIndicator(SpriteGroup):
 	def __init__(self, scene):
-		self.scene = scene
-	
-		sprite = self.scene.factory.from_image(Resources.get('tile-selection.png'))
-		super().__init__(layer=LAYERS[self.__class__.__name__], sprites=[sprite])
+		super().__init__(scene, layer=get_layer(self), sprites=[scene.factory.from_image(Resources.get('tile-selection.png'))])
 	def on_mouse_motion(self, event, x, y, dx, dy):
 		self.set_position(screen2map((x,y)))
 	def set_position(self, position):
 		for sprite, layer in self.data:
 			sprite.position = map2screen(position)
-		self.register(self.scene)
+		self.register()
 		
 class MyScene(SceneBase):
 	def __init__(self, **kwargs):
 		super().__init__(**kwargs)
-		self.spritesystem = SpriteSystem()
+		self.sprite_system = SpriteSystem(self)
+		self.range_indicator_factory = RangeIndicatorFactory(self)
 		self.tilemap = TileMap(self, screen2map((SCREEN_WIDTH, SCREEN_HEIGHT)))
 		self.hover_sprite = None
 		self.hover_indicator = HoverIndicator(self)
@@ -198,7 +194,7 @@ class MyScene(SceneBase):
 		for unit in self.units:
 			unit.on_init()
 	def on_update(self):
-		self.spritesystem.on_update(self)
+		self.sprite_system.on_update()
 		
 	def on_mouse_motion(self, event, x, y, dx, dy):
 		self.hover_indicator.on_mouse_motion(event, x, y, dx, dy)
@@ -212,6 +208,7 @@ class MyScene(SceneBase):
 		if not self.selected_unit is None:
 			self.selected_unit.select()
 	def on_mouse_press(self, event, x, y, button, double):
+		print('hey there')
 		position = screen2map((x,y))
 		if button == "LEFT":
 			unit = self.get_unit_at_position(position)
