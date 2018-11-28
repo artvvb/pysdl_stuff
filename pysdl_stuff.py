@@ -37,12 +37,12 @@ class TileMapGfx:
 		self.scene = scene
 		sprites = []
 		self.sprite_group = scene.sprite_factory.from_color(
-			lambda position: weight_to_color(tile_map.tiles[screen2map(position)].weight),
+			lambda position: weight_to_color(tile_map.tiles[position].weight),
 			(TILE_SIZE,TILE_SIZE),
 			positions = tile_map.tiles,
 			depth = get_layer(self)
 		)
-		self.sprite_group.register()
+		self.sprite_group.register()																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																													
 	def update(self):
 		pass
 class TileMap:
@@ -88,18 +88,18 @@ def get_range(scene, unit):
 		EDGE.sort(key=lambda element: element[1])
 	return RANGE
 
-class RangeIndicatorFactory:
-	def __init__(self, scene):
-		self.scene = scene
-	def from_range(self, positions):
-		sprites = []
-		for position in positions:
-			
-			sprite = self.scene.factory.from_image(Resources.get('in-range.png'))
-			sprite.position = map2screen(position)
-			sprite.depth = get_layer(self)
-			sprites.append(sprite)
-		return SpriteGroup(self.scene, sprites)
+#class RangeIndicatorFactory:
+#	def __init__(self, scene):
+#		self.scene = scene
+#	def from_range(self, positions):
+#		sprites = []
+#		for position in positions:
+#			
+#			sprite = self.scene.factory.from_image(Resources.get('in-range.png'))
+#			sprite.position = map2screen(position)
+#			sprite.depth = get_layer(self)
+#			sprites.append(sprite)
+#		return SpriteGroup(self.scene, sprites)
 		
 class UnitGfx:
 	def __init__(self, scene, unit):
@@ -208,10 +208,12 @@ class MyScene(SceneBase):
 	def __init__(self, **kwargs):
 		super().__init__(**kwargs)
 		
+		self.map_to_screen_transform = lambda position: map2screen(position)
+		
 		self.sprite_system = SpriteSystem(self)
 		self.sprite_factory = SpriteFactory(self)
 		
-		self.range_indicator_factory = RangeIndicatorFactory(self)
+		#self.range_indicator_factory = RangeIndicatorFactory(self)
 		self.tilemap = TileMap(self, screen2map((SCREEN_WIDTH, SCREEN_HEIGHT)))
 		self.hover_indicator = HoverIndicator(self)
 		self.units = [
