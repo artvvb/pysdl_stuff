@@ -5,6 +5,7 @@ from manager import Resources
 class SpriteFactory:
 	def __init__(self, scene):
 		self.sprite_system = scene.sprite_system
+		#self.viewport_system = scene.viewport_system
 		self.color_factory = scene.factory.from_color
 		self.image_factory = scene.factory.from_image
 		self.map_to_screen_transform = scene.map_to_screen_transform

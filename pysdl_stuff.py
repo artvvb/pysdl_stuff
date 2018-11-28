@@ -4,6 +4,7 @@ import sdl2
 import sdl2.ext
 import random
 from sprite_system import SpriteFactory, SpriteHandler, SpriteGroup, SpriteSystem
+from viewport_system import ViewportSystem
 random.seed()
 
 LAYERS = {
@@ -23,10 +24,6 @@ def weight_to_color(weight):
 	color = int(255 * weight / (TILE_MAX_WEIGHT-1))
 	if color > 255: color = 255
 	return sdl2.ext.Color(color, color, color)
-def map2screen(map_position):
-	return (map_position[0] * TILE_SIZE, map_position[1] * TILE_SIZE)
-def screen2map(screen_position):
-	return (screen_position[0] // TILE_SIZE, screen_position[1] // TILE_SIZE)
 
 class Tile:
 	def __init__(self, weight):
@@ -110,19 +107,19 @@ class UnitGfx:
 		
 		self.unit_indicator = factory.from_image(
 			'unit.png',
-			position = map2screen(unit.position),
+			position = unit.position,
 			depth = get_layer(self)[0]
 		)
 		
 		self.selected_indicator = factory.from_image(
 			'unit-selected.png',
-			position = map2screen(unit.position),
+			position = unit.position,
 			depth = get_layer(self)[1]
 		)
 		
 		self.moved_indicator = factory.from_image(
 			'unit-moved.png',
-			position = map2screen(unit.position),
+			position = unit.position,
 			depth = get_layer(self)[2]
 		)
 		
@@ -134,13 +131,13 @@ class UnitGfx:
 		self.range_indicator_group.deregister()
 		
 		if self.unit.moved:
-			self.moved_indicator.sprite.position = map2screen(self.unit.position)
+			self.moved_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
 			self.moved_indicator.register()
 		else:
-			self.unit_indicator.sprite.position = map2screen(self.unit.position)
+			self.unit_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
 			self.unit_indicator.register()
 		if self.unit.selected:
-			self.selected_indicator.sprite.position = map2screen(self.unit.position)
+			self.selected_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
 			self.selected_indicator.register()
 			
 			self.range_indicator_group = self.scene.sprite_factory.from_image(
@@ -193,28 +190,29 @@ class HoverIndicatorGfx:
 		)
 	def update(self):
 		self.sprite_handler.deregister()
-		self.sprite_handler.sprite.position = map2screen(self.hover_indicator.position)
+		self.sprite_handler.sprite.position = self.scene.map_to_screen_transform(self.hover_indicator.position)
 		self.sprite_handler.register()
 class HoverIndicator:
 	def __init__(self, scene):
 		self.scene = scene
 		self.gfx = HoverIndicatorGfx(self.scene, self)
 		self.position = None
-	def on_mouse_motion(self, event, x, y, dx, dy):
-		self.position = screen2map((x,y))
+	def update(self, event, position):
+		self.position = position
 		self.gfx.update()
 		
 class MyScene(SceneBase):
 	def __init__(self, **kwargs):
 		super().__init__(**kwargs)
-		
-		self.map_to_screen_transform = lambda position: map2screen(position)
+		self.viewport_system = ViewportSystem(self)
+		self.map_to_screen_transform = lambda position: self.viewport_system.map_to_screen_transform(position)
+		self.screen_to_map_transform = lambda position: self.viewport_system.screen_to_map_transform(position)
 		
 		self.sprite_system = SpriteSystem(self)
 		self.sprite_factory = SpriteFactory(self)
 		
 		#self.range_indicator_factory = RangeIndicatorFactory(self)
-		self.tilemap = TileMap(self, screen2map((SCREEN_WIDTH, SCREEN_HEIGHT)))
+		self.tilemap = TileMap(self, self.screen_to_map_transform((SCREEN_WIDTH, SCREEN_HEIGHT)))
 		self.hover_indicator = HoverIndicator(self)
 		self.units = [
 			Unit(self, (2,2), 4),
@@ -222,14 +220,24 @@ class MyScene(SceneBase):
 		]
 		self.selected_unit = None
 		
+		self.systems = [ # call order matters...
+			self.viewport_system,
+			self.sprite_system
+		]
+		
 		for unit in self.units:
 			unit.on_init()
 	def on_update(self):
-		self.sprite_system.on_update()
-		
+		for system in self.systems:
+			op = getattr(system, "on_update", None)
+			if op is not None and callable(op):
+				op()
 	def on_mouse_motion(self, event, x, y, dx, dy):
-		self.hover_indicator.on_mouse_motion(event, x, y, dx, dy)
-		
+		self.hover_indicator.update(event, self.screen_to_map_transform((x,y)))
+		for system in self.systems:
+			op = getattr(system, "on_mouse_motion", None)
+			if op is not None and callable(op):
+				op(event, x, y, dx, dy)
 	def get_unit_at_position(self, position):
 		return find_element(self.units, lambda element: element.position == position)
 	def select_unit(self, unit):
@@ -239,7 +247,7 @@ class MyScene(SceneBase):
 		if not self.selected_unit is None:
 			self.selected_unit.select()
 	def on_mouse_press(self, event, x, y, button, double):
-		position = screen2map((x,y))
+		position = self.screen_to_map_transform((x,y))
 		if button == "LEFT":
 			unit = self.get_unit_at_position(position)
 			if self.selected_unit is None:
@@ -249,6 +257,10 @@ class MyScene(SceneBase):
 			elif position in self.selected_unit.range:
 				self.selected_unit.move_unit(position)
 				self.select_unit(None)
+		for system in self.systems:
+			op = getattr(system, "on_mouse_press", None)
+			if op is not None and callable(op):
+				op(event, x, y, button, double)
 	def end_turn(self):
 		for unit in self.units:
 			unit.on_end_turn()
@@ -258,6 +270,11 @@ class MyScene(SceneBase):
 			if mod.ctrl: return
 			if mod.shift: return
 			self.end_turn()
+		for system in self.systems:
+			op = getattr(system, "on_key_press", None)
+			if op is not None and callable(op):
+				op(event, sym, mod)
+		
 				
 if __name__ == '__main__':
 	m = Manager(width=SCREEN_WIDTH, height=SCREEN_HEIGHT)
