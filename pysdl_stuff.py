@@ -10,7 +10,7 @@ random.seed()
 LAYERS = {
 	"HoverIndicatorGfx": 5,
 	"UnitGfx": [4,3,2,1],
-	"TileMapGfx": 0
+	"TileMapGfx": [0,1]
 }
 def get_layer(obj): return LAYERS[obj.__class__.__name__]
 
@@ -33,11 +33,18 @@ class TileMapGfx:
 	def __init__(self, scene, tile_map):
 		self.scene = scene
 		sprites = []
+		self.border = scene.sprite_factory.from_color(
+			sdl2.ext.Color(0,0,255), # BLUE
+			(SCREEN_WIDTH + TILE_SIZE, SCREEN_HEIGHT + TILE_SIZE),
+			screen_position = (-TILE_SIZE//2, -TILE_SIZE//2),
+			depth = get_layer(self)[0]
+		)
+		self.border.register()
 		self.sprite_group = scene.sprite_factory.from_color(
 			lambda position: weight_to_color(tile_map.tiles[position].weight),
 			(TILE_SIZE,TILE_SIZE),
 			positions = tile_map.tiles,
-			depth = get_layer(self)
+			depth = get_layer(self)[1]
 		)
 		self.sprite_group.register()																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																													
 	def update(self):
@@ -85,19 +92,6 @@ def get_range(scene, unit):
 		EDGE.sort(key=lambda element: element[1])
 	return RANGE
 
-#class RangeIndicatorFactory:
-#	def __init__(self, scene):
-#		self.scene = scene
-#	def from_range(self, positions):
-#		sprites = []
-#		for position in positions:
-#			
-#			sprite = self.scene.factory.from_image(Resources.get('in-range.png'))
-#			sprite.position = map2screen(position)
-#			sprite.depth = get_layer(self)
-#			sprites.append(sprite)
-#		return SpriteGroup(self.scene, sprites)
-		
 class UnitGfx:
 	def __init__(self, scene, unit):
 		# TODO: Some worry about memory leaks from this nonsense:
@@ -123,12 +117,13 @@ class UnitGfx:
 			depth = get_layer(self)[2]
 		)
 		
-		self.range_indicator_group = SpriteGroup(scene)
+		self.range_indicator_group = None
 	def update(self):
 		self.unit_indicator.deregister()
 		self.selected_indicator.deregister()
 		self.moved_indicator.deregister()
-		self.range_indicator_group.deregister()
+		if not self.range_indicator_group is None:
+			self.range_indicator_group.deregister()
 		
 		if self.unit.moved:
 			self.moved_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
@@ -204,7 +199,7 @@ class HoverIndicator:
 class MyScene(SceneBase):
 	def __init__(self, **kwargs):
 		super().__init__(**kwargs)
-		self.viewport_system = ViewportSystem(self)
+		self.viewport_system = ViewportSystem(self, position=(0,0), size=(SCREEN_WIDTH,SCREEN_HEIGHT))
 		self.map_to_screen_transform = lambda position: self.viewport_system.map_to_screen_transform(position)
 		self.screen_to_map_transform = lambda position: self.viewport_system.screen_to_map_transform(position)
 		
@@ -261,6 +256,11 @@ class MyScene(SceneBase):
 			op = getattr(system, "on_mouse_press", None)
 			if op is not None and callable(op):
 				op(event, x, y, button, double)
+	def on_mouse_drag(self, event, x, y, dx, dy, button):
+		for system in self.systems:
+			op = getattr(system, "on_mouse_drag", None)
+			if op is not None and callable(op):
+				op(event, x, y, dx, dy, button)
 	def end_turn(self):
 		for unit in self.units:
 			unit.on_end_turn()
@@ -274,7 +274,6 @@ class MyScene(SceneBase):
 			op = getattr(system, "on_key_press", None)
 			if op is not None and callable(op):
 				op(event, sym, mod)
-		
 				
 if __name__ == '__main__':
 	m = Manager(width=SCREEN_WIDTH, height=SCREEN_HEIGHT)

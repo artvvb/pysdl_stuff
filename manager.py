@@ -193,10 +193,10 @@ class Manager(object):
                 x = event.motion.x
                 y = event.motion.y
                 buttons = event.motion.state
-                self._mouse_x = x
-                self._mouse_y = y
                 dx = x - self._mouse_x
                 dy = y - self._mouse_y
+                self._mouse_x = x
+                self._mouse_y = y
                 if buttons & sdl2.SDL_BUTTON_LMASK:
                     scene.on_mouse_drag(event, x, y, dx, dy, "LEFT")
                 elif buttons & sdl2.SDL_BUTTON_MMASK:
