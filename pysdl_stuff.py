@@ -40,9 +40,8 @@ class TileMapGfx:
 			depth = get_layer(self)[0]
 		)
 		self.border.register()
-		self.sprite_group = scene.sprite_factory.from_color(
-			lambda position: weight_to_color(tile_map.tiles[position].weight),
-			(TILE_SIZE,TILE_SIZE),
+		self.sprite_group = scene.sprite_factory.from_map(
+			lambda position: tile_map.tiles[position],
 			positions = tile_map.tiles,
 			depth = get_layer(self)[1]
 		)

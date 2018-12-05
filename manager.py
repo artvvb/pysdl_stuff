@@ -119,7 +119,6 @@ class Manager(object):
         # Create a sprite factory that allows us to create visible 2D elements
         # easily.
         self.factory = sdl2.ext.SpriteFactory(sdl2.ext.TEXTURE, renderer=self.renderer)
-            #sdl2.ext.TEXTURE, renderer=self.renderer)
 
         # Creates a simple rendering system for the Window. The
         # SpriteRenderSystem can draw Sprite objects on the window.

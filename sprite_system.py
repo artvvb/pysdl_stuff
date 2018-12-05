@@ -1,14 +1,53 @@
 import sdl2
 import sdl2.ext
 from manager import Resources
+from constants import TILE_SIZE, TILE_MAX_WEIGHT
+
+class TextureMap:
+	def __init__(self):
+		filenames = {
+			0: 'tile0.png',
+			1: 'tile1.png',
+			2: 'tile2.png',
+			3: 'tile3.png',
+			4: 'tile4.png'
+		}
+		self.textures = []
+		for key in filenames:
+			self.textures.append(sdl2.ext.load_image(Resources.get(filenames[key])))
+	def get_surface(self, tile):
+		return self.textures[TILE_MAX_WEIGHT-tile.weight-1]
+	
 
 class SpriteFactory:
 	def __init__(self, scene):
 		self.sprite_system = scene.sprite_system
 		self.viewport_system = scene.viewport_system
 		self.color_factory = scene.factory.from_color
+		self.surface_factory = scene.factory.from_surface
 		self.image_factory = scene.factory.from_image
 		self.map_to_screen_transform = scene.map_to_screen_transform
+		
+		self.tile_texture_map = TextureMap()
+	def from_map(self, key_func, **kwargs):
+		global tile_texture_map
+		print(key_func, kwargs['depth'])
+		sprites = []
+		for position in kwargs['positions']:
+			sprite = self.surface_factory(self.tile_texture_map.get_surface(key_func(position)))
+			sprite.position = self.map_to_screen_transform(position)
+			sprite.depth = kwargs['depth']
+			sprites.append(sprite)
+		
+		#position = (0,0)
+		#sprite = self.surface_factory(self.tile_texture_map.get_surface(key_func(position)))
+		#sprite.position = self.map_to_screen_transform(position)
+		#sprite.depth = kwargs['depth']
+		#sprites.append(sprite)
+		
+		return SpriteGroup(self.sprite_system, self.viewport_system, sprites)
+		
+		
 	def from_color(self, color, size, **kwargs):
 		## kwargs = {positions OR position, depth}
 		if 'positions' in kwargs and 'position' in kwargs:
