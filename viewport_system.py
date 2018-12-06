@@ -1,5 +1,6 @@
 from constants import TILE_SIZE
 import sdl2
+
 class ViewportSystem:
 	def __init__(self, scene, **kwargs):
 		self.position = kwargs['position']
@@ -7,10 +8,10 @@ class ViewportSystem:
 		self.registered_objects = []
 	def update_object_positions(self, dx, dy):
 		for obj in self.registered_objects:
-			obj.position = (
-				obj.position[0] + dx,
-				obj.position[1] + dy
-			)
+			if hasattr(obj, 'x') and hasattr(obj, 'y'):
+				obj.position = (obj.position.x + dx, obj.position.y + dy)
+			else:
+				obj.position = (obj.position[0] + dx, obj.position[1] + dy)
 	def on_key_press(self, event, sym, mod):
 		deltas = {
 			sdl2.SDLK_LEFT: (-TILE_SIZE//2,0),
