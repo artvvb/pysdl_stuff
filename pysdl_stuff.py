@@ -5,6 +5,7 @@ import sdl2.ext
 import random
 from sprite_system import SpriteFactory, SpriteHandler, SpriteGroup, SpriteSystem
 from viewport_system import ViewportSystem
+from texture_maps import TileTextureMap, ArrowTextureMap
 random.seed()
 
 LAYERS = {
@@ -19,11 +20,6 @@ def find_element(L, func):
 		if func(element):
 			return element
 	return None
-def weight_to_color(weight):
-	sprite_size = (TILE_SIZE,TILE_SIZE)
-	color = int(255 * weight / (TILE_MAX_WEIGHT-1))
-	if color > 255: color = 255
-	return sdl2.ext.Color(color, color, color)
 
 class Tile:
 	def __init__(self, weight):
@@ -41,6 +37,7 @@ class TileMapGfx:
 		)
 		self.border.register()
 		self.sprite_group = scene.sprite_factory.from_map(
+			self.scene.tile_texture_map,
 			lambda position: tile_map.tiles[position],
 			positions = tile_map.tiles,
 			depth = get_layer(self)[1]
@@ -117,6 +114,14 @@ class UnitGfx:
 		)
 		
 		self.range_indicator_group = None
+	def update_range(self):
+		self.range_indicator_group = self.scene.sprite_factory.from_image(
+			'in-range.png',
+			positions = self.unit.range,
+			depth = get_layer(self)[3]
+		)
+		self.range_indicator_group.register()
+		
 	def update(self):
 		self.unit_indicator.deregister()
 		self.selected_indicator.deregister()
@@ -133,13 +138,7 @@ class UnitGfx:
 		if self.unit.selected:
 			self.selected_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
 			self.selected_indicator.register()
-			
-			self.range_indicator_group = self.scene.sprite_factory.from_image(
-				'in-range.png',
-				positions = self.unit.range,
-				depth = get_layer(self)[3]
-			)
-			self.range_indicator_group.register()
+			self.update_range()
 class Unit:
 	def __init__(self, scene, position, move_range):
 		self.scene = scene
@@ -204,6 +203,9 @@ class MyScene(SceneBase):
 		
 		self.sprite_system = SpriteSystem(self)
 		self.sprite_factory = SpriteFactory(self)
+		
+		self.tile_texture_map = TileTextureMap()
+		self.arrow_texture_map = ArrowTextureMap()
 		
 		#self.range_indicator_factory = RangeIndicatorFactory(self)
 		self.tilemap = TileMap(self, self.screen_to_map_transform((SCREEN_WIDTH, SCREEN_HEIGHT)))

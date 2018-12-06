@@ -3,22 +3,6 @@ import sdl2.ext
 from manager import Resources
 from constants import TILE_SIZE, TILE_MAX_WEIGHT
 
-class TextureMap:
-	def __init__(self):
-		filenames = {
-			0: 'tile0.png',
-			1: 'tile1.png',
-			2: 'tile2.png',
-			3: 'tile3.png',
-			4: 'tile4.png'
-		}
-		self.textures = []
-		for key in filenames:
-			self.textures.append(sdl2.ext.load_image(Resources.get(filenames[key])))
-	def get_surface(self, tile):
-		return self.textures[TILE_MAX_WEIGHT-tile.weight-1]
-	
-
 class SpriteFactory:
 	def __init__(self, scene):
 		self.sprite_system = scene.sprite_system
@@ -28,13 +12,12 @@ class SpriteFactory:
 		self.image_factory = scene.factory.from_image
 		self.map_to_screen_transform = scene.map_to_screen_transform
 		
-		self.tile_texture_map = TextureMap()
-	def from_map(self, key_func, **kwargs):
+	def from_map(self, texture_map, key_func, **kwargs):
 		global tile_texture_map
 		print(key_func, kwargs['depth'])
 		sprites = []
 		for position in kwargs['positions']:
-			sprite = self.surface_factory(self.tile_texture_map.get_surface(key_func(position)))
+			sprite = self.surface_factory(texture_map.get_surface(key_func(position)))
 			sprite.position = self.map_to_screen_transform(position)
 			sprite.depth = kwargs['depth']
 			sprites.append(sprite)
