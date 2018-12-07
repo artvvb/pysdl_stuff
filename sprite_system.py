@@ -3,6 +3,12 @@ import sdl2.ext
 from manager import Resources
 from constants import TILE_SIZE, TILE_MAX_WEIGHT
 
+class SurfaceFactory:
+	def __init__(self):
+		pass
+	def from_image(self, filename):
+		return sdl2.ext.load_image(Resources.get(filename))
+
 class SpriteFactory:
 	def __init__(self, scene):
 		self.sprite_system = scene.sprite_system
@@ -11,9 +17,22 @@ class SpriteFactory:
 		self.surface_factory = scene.factory.from_surface
 		self.image_factory = scene.factory.from_image
 		self.map_to_screen_transform = scene.map_to_screen_transform
-		
+	def combine(self, src, dest):
+		## Assume that both are the same size
+		sdl2.surface.SDL_BlitSurface(src, None, dest, None)
+	def from_surface(self, surface, positions, depth):
+		sprites = []
+		for position in positions:
+			sprite = self.surface_factory(surface)
+			sprite.position = self.map_to_screen_transform(position)
+			sprite.depth = depth
+			sprites.append(sprite)
+		if len(positions) == 1:
+			return SpriteHandler(self.sprite_system, self.viewport_system, sprites[0])
+		else:
+			return SpriteGroup(self.sprite_system, self.viewport_system, sprites)
+		## args: positions
 	def from_map(self, texture_map, key_func, **kwargs):
-		global tile_texture_map
 		sprites = []
 		for position in kwargs['positions']:
 			surf = texture_map.get_surface(key_func(position))
@@ -23,7 +42,6 @@ class SpriteFactory:
 				sprite.depth = kwargs['depth']
 				sprites.append(sprite)		
 		return SpriteGroup(self.sprite_system, self.viewport_system, sprites)
-		
 		
 	def from_color(self, color, size, **kwargs):
 		## kwargs = {positions OR position, depth}

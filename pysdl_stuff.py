@@ -2,8 +2,9 @@ from manager import Manager, SceneBase, Resources
 from constants import (TILE_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, TILE_MAX_WEIGHT)
 import sdl2
 import sdl2.ext
+import sdl2.surface
 import random
-from sprite_system import SpriteFactory, SpriteHandler, SpriteGroup, SpriteSystem
+from sprite_system import SpriteFactory, SpriteHandler, SpriteGroup, SpriteSystem, SurfaceFactory
 from viewport_system import ViewportSystem
 from texture_maps import TileTextureMap, ArrowTextureMap
 from movement_system import MovementSystem, Position
@@ -20,7 +21,6 @@ def get_layer(obj): return LAYERS[obj.__class__.__name__]
 class Tile:
 	def __init__(self, weight):
 		self.weight = weight
-
 class TileMapGfx:
 	def __init__(self, scene, tile_map):
 		self.scene = scene
@@ -51,17 +51,21 @@ class TileMap:
 				self.tiles[(x,y)] = Tile(random.randrange(0, TILE_MAX_WEIGHT))
 		self.gfx = TileMapGfx(self.scene, self)
 
+
+		
 class UnitGfx:
 	def __init__(self, scene, unit):
-		# TODO: Some worry about memory leaks from this nonsense:
 		self.unit = unit
 		self.scene = scene
 		factory = scene.sprite_factory
+		surface_factory = scene.surface_factory
 		
-		self.unit_indicator = factory.from_image(
-			'unit.png',
-			position = unit.position,
-			depth = get_layer(self)[0]
+		surf = scene.surface_factory.from_image('unit.png')
+		#sdl2.surface.SDL_SetColorKey(surf, True, sdl2.ext.Color(255,0,0))
+		self.unit_indicator = factory.from_surface(
+			surf,
+			[unit.position],
+			get_layer(self)[0]
 		)
 		
 		self.selected_indicator = factory.from_image(
@@ -69,58 +73,35 @@ class UnitGfx:
 			position = unit.position,
 			depth = get_layer(self)[1]
 		)
-		
 		self.moved_indicator = factory.from_image(
 			'unit-moved.png',
 			position = unit.position,
 			depth = get_layer(self)[2]
 		)
-		
 		self.range_indicator_group = None
 	def update_range(self):
-		## if scene.hover_indicator position is in range, user resources/arrows to draw the path from the unit to the hover position
-		
-		##def from_map(self, texture_map, key_func, **kwargs)
 		positions = [x['path'][-1] for x in self.unit.range]
-		if self.scene.hover_indicator.position is None or not self.scene.hover_indicator.position in positions:
+		if self.scene.hover_indicator.position is None:
 			key_func = lambda position: None
+		elif not self.scene.hover_indicator.position in positions:
+			key_func = lambda position: (False,False,False,False)
 		else:
 			hover_path = next(element['path'] for element in self.unit.range if element['path'][-1] == self.scene.hover_indicator.position)
 			keys = {}
 			for idx in range(len(hover_path)):
-				U,D,R,L = False,False,False,False
-				if idx > 0:
-					delta = hover_path[idx] - hover_path[idx-1]
-					if delta == ( 0, 1): U = True
-					if delta == ( 0,-1): D = True
-					if delta == ( 1, 0): L = True
-					if delta == (-1, 0): R = True
-				if idx+1 < len(hover_path):
-					delta = hover_path[idx] - hover_path[idx+1]
-					if delta == ( 0, 1): U = True
-					if delta == ( 0,-1): D = True
-					if delta == ( 1, 0): L = True
-					if delta == (-1, 0): R = True
-				keys[hover_path[idx]] = (U,D,R,L)
+				deltas = [hover_path[idx]-hover_path[idx+d] for d in (-1,1) if idx+d >= 0 and idx+d < len(hover_path)]
+				keys[hover_path[idx]] = ((0,1) in deltas, (0,-1) in deltas, (-1,0) in deltas, (1,0) in deltas) ## (U,D,L,R)
 			for position in positions:
 				if not position in keys:
 					keys[position] = (False,False,False,False)
-			key_func = lambda position: keys[position]
-			
+			key_func = lambda position: keys[position]	
 		self.range_indicator_group = self.scene.sprite_factory.from_map(
 			self.scene.arrow_texture_map,
 			key_func,
 			positions = positions,
 			depth = get_layer(self)[3]
 		)
-		
-		#self.range_indicator_group = self.scene.sprite_factory.from_image(
-		#	'in-range.png',
-		#	positions = [x['path'][-1] for x in self.unit.range],
-		#	depth = get_layer(self)[3]
-		#)
 		self.range_indicator_group.register()
-		
 	def update(self):
 		self.unit_indicator.deregister()
 		self.selected_indicator.deregister()
@@ -131,13 +112,13 @@ class UnitGfx:
 		if self.unit.moved:
 			self.moved_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
 			self.moved_indicator.register()
-		else:
-			self.unit_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
-			self.unit_indicator.register()
-		if self.unit.selected:
+		elif self.unit.selected:
 			self.selected_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
 			self.selected_indicator.register()
 			self.update_range()
+		else:
+			self.unit_indicator.sprite.position = self.scene.map_to_screen_transform(self.unit.position)
+			self.unit_indicator.register()
 class Unit:
 	def __init__(self, scene, position, move_range):
 		self.scene = scene
@@ -204,6 +185,7 @@ class MyScene(SceneBase):
 		
 		self.sprite_system = SpriteSystem(self)
 		self.sprite_factory = SpriteFactory(self)
+		self.surface_factory = SurfaceFactory()
 		
 		self.tile_texture_map = TileTextureMap()
 		self.arrow_texture_map = ArrowTextureMap()
@@ -226,7 +208,14 @@ class MyScene(SceneBase):
 		
 		for unit in self.units:
 			unit.on_init()
+			
+		self.turn = 0
 	def on_update(self):
+		for unit in self.units:
+			if not unit.moved:
+				break
+		else:
+			self.end_turn()
 		for system in self.systems:
 			op = getattr(system, "on_update", None)
 			if op is not None and callable(op):
@@ -266,6 +255,8 @@ class MyScene(SceneBase):
 			if op is not None and callable(op):
 				op(event, x, y, dx, dy, button)
 	def end_turn(self):
+		print('End Turn %d' % self.turn)
+		self.turn += 1
 		for unit in self.units:
 			unit.on_end_turn()
 	def on_key_press(self, event, sym, mod):
