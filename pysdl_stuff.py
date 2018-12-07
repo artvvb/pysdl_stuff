@@ -6,7 +6,7 @@ import random
 from sprite_system import SpriteFactory, SpriteHandler, SpriteGroup, SpriteSystem
 from viewport_system import ViewportSystem
 from texture_maps import TileTextureMap, ArrowTextureMap
-from movement_system import MovementSystem
+from movement_system import MovementSystem, Position
 from constants import find_element
 random.seed()
 
@@ -80,11 +80,45 @@ class UnitGfx:
 	def update_range(self):
 		## if scene.hover_indicator position is in range, user resources/arrows to draw the path from the unit to the hover position
 		
-		self.range_indicator_group = self.scene.sprite_factory.from_image(
-			'in-range.png',
-			positions = [x['path'][-1] for x in self.unit.range],
+		##def from_map(self, texture_map, key_func, **kwargs)
+		positions = [x['path'][-1] for x in self.unit.range]
+		if self.scene.hover_indicator.position is None or not self.scene.hover_indicator.position in positions:
+			key_func = lambda position: None
+		else:
+			hover_path = next(element['path'] for element in self.unit.range if element['path'][-1] == self.scene.hover_indicator.position)
+			keys = {}
+			for idx in range(len(hover_path)):
+				U,D,R,L = False,False,False,False
+				if idx > 0:
+					delta = hover_path[idx] - hover_path[idx-1]
+					if delta == ( 0, 1): U = True
+					if delta == ( 0,-1): D = True
+					if delta == ( 1, 0): L = True
+					if delta == (-1, 0): R = True
+				if idx+1 < len(hover_path):
+					delta = hover_path[idx] - hover_path[idx+1]
+					if delta == ( 0, 1): U = True
+					if delta == ( 0,-1): D = True
+					if delta == ( 1, 0): L = True
+					if delta == (-1, 0): R = True
+				keys[hover_path[idx]] = (U,D,R,L)
+			for position in positions:
+				if not position in keys:
+					keys[position] = (False,False,False,False)
+			key_func = lambda position: keys[position]
+			
+		self.range_indicator_group = self.scene.sprite_factory.from_map(
+			self.scene.arrow_texture_map,
+			key_func,
+			positions = positions,
 			depth = get_layer(self)[3]
 		)
+		
+		#self.range_indicator_group = self.scene.sprite_factory.from_image(
+		#	'in-range.png',
+		#	positions = [x['path'][-1] for x in self.unit.range],
+		#	depth = get_layer(self)[3]
+		#)
 		self.range_indicator_group.register()
 		
 	def update(self):
@@ -135,7 +169,6 @@ class Unit:
 			self.selected = False
 		self.gfx.update()
 	def in_range(self, position):
-		print()
 		return position in [x['path'][-1] for x in self.range]
 		
 class HoverIndicatorGfx:
@@ -159,6 +192,8 @@ class HoverIndicator:
 	def update(self, event, position):
 		self.position = position
 		self.gfx.update()
+		if self.scene.selected_unit is not None:
+			self.scene.selected_unit.gfx.update()
 		
 class MyScene(SceneBase):
 	def __init__(self, **kwargs):

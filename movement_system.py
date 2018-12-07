@@ -34,6 +34,10 @@ class Position:
 			raise KeyError('bad getitem argument')
 	def __repr__(self):
 		return "(%d, %d)" % (self.x, self.y)
+	def __sub__(self, other):
+		return Position(x=self.x-other.x, y=self.y-other.y)
+	def to_tuple(self):
+		return (self.x, self.y)
 class MovementSystem:
 	def __init__(self, scene):
 		self.units = scene.units

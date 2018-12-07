@@ -20,20 +20,21 @@ class TileTextureMap:
 class ArrowTextureMap:
 	def __init__(self):
 		filenames = {
-			((None,None),(None,None)): 'arrow_0000.png',
-			((0,1),(None,None)):       'arrow_0001.png',
-			((1,0),(None,None)):       'arrow_0010.png',
-			((1,0),(None,None)):       'arrow_0100.png',
-			((0,1),(None,None)):       'arrow_1000.png',
-			((0,1),(-1,0)):            'arrow_0011.png',
-			((1,0),(0,1)):             'arrow_0101.png',
-			((1,0),(1,0)):             'arrow_0110.png',
-			((0,1),(0,1)):             'arrow_1001.png',
-			((0,1),(1,0)):             'arrow_1010.png',
-			((1,0),(0,-1)):            'arrow_1100.png'
+			(False, False, False, False): 'arrow_0000.png',
+			(False, True,  False, False): 'arrow_0001.png',
+			(False, False, True,  False): 'arrow_0010.png',
+			(False, False, False, True ): 'arrow_0100.png',
+			(True,  False, False, False): 'arrow_1000.png',
+			(False, True,  True,  False): 'arrow_0011.png',
+			(False, True,  False, True ): 'arrow_0101.png',
+			(False, False, True,  True ): 'arrow_0110.png',
+			(True,  True,  False, False): 'arrow_1001.png',
+			(True,  False, True,  False): 'arrow_1010.png',
+			(True,  False, False, True ): 'arrow_1100.png'
 		}
-		textures = {}
+		self.textures = {}
 		for key in filenames:
-			textures[key] = sdl2.ext.load_image(Resources.get(filenames[key]))
-	def get_surface(self, from_delta, to_delta):
-		return self.textures[(from_delta, to_delta)]
+			self.textures[key] = sdl2.ext.load_image(Resources.get(filenames[key]))
+	def get_surface(self, key):
+		if key is not None:
+			return self.textures[key]

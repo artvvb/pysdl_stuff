@@ -14,20 +14,14 @@ class SpriteFactory:
 		
 	def from_map(self, texture_map, key_func, **kwargs):
 		global tile_texture_map
-		print(key_func, kwargs['depth'])
 		sprites = []
 		for position in kwargs['positions']:
-			sprite = self.surface_factory(texture_map.get_surface(key_func(position)))
-			sprite.position = self.map_to_screen_transform(position)
-			sprite.depth = kwargs['depth']
-			sprites.append(sprite)
-		
-		#position = (0,0)
-		#sprite = self.surface_factory(self.tile_texture_map.get_surface(key_func(position)))
-		#sprite.position = self.map_to_screen_transform(position)
-		#sprite.depth = kwargs['depth']
-		#sprites.append(sprite)
-		
+			surf = texture_map.get_surface(key_func(position))
+			if surf is not None:
+				sprite = self.surface_factory(surf)
+				sprite.position = self.map_to_screen_transform(position)
+				sprite.depth = kwargs['depth']
+				sprites.append(sprite)		
 		return SpriteGroup(self.sprite_system, self.viewport_system, sprites)
 		
 		
